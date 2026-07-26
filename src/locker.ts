@@ -1,0 +1,8 @@
+import{createHash}from"crypto";import type{PromptVersion,DriftResult,Lockfile}from"./types.js";
+function sha256(s:string):string{return createHash("sha256").update(s).digest("hex");}
+export class PromptLocker{private lockfiles=new Map<string,Lockfile>();
+ lock(name:string,content:string,ver:string):PromptVersion{const lf=this.lockfiles.get(name)||{name,current:"",history:[]};const pv:PromptVersion={name,version:ver,content,sha256:sha256(content),created:Date.now(),parent:lf.current||undefined};lf.history.push(pv);lf.current=pv.sha256;this.lockfiles.set(name,lf);return pv;}
+ check(name:string,content:string):DriftResult{const lf=this.lockfiles.get(name);if(!lf)return{name,drifted:false,before:"",after:content,diff:{added:0,removed:0}};const c=lf.history.find(v=>v.sha256===lf.current);const cc=c?.content||"";const dr=sha256(content)!==lf.current;const bf=cc.split(/\s+/);const af=content.split(/\s+/);return{name,drifted:dr,before:cc.slice(0,100),after:content.slice(0,100),diff:{added:af.filter(w=>!bf.includes(w)).length,removed:bf.filter(w=>!af.includes(w)).length}};}
+ rollback(name:string):PromptVersion|undefined{const lf=this.lockfiles.get(name);if(!lf||lf.history.length<2)return undefined;const p=lf.history[lf.history.length-2];lf.current=p.sha256;return p;}
+ getHistory(name:string):PromptVersion[]{return this.lockfiles.get(name)?.history||[];}
+ versionCount(name:string):number{return this.lockfiles.get(name)?.history.length||0;}}
